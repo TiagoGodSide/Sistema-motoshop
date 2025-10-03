@@ -60,5 +60,5 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 # Sistema-motoshop
-Projeto pessoal para criação de um sistema web de gerenciamento e PDV para loja e oficina de motos.
+Projeto pessoal para criação de um sistema web de gerenciamento e PDV para loja e oficina de motos. Eu estava numa oficina de motos, esperando o serviço da minha moto e percebi que lá não tem nenhum sistema de gerenciamento, nem de vendas, de serviços e nem financeiro, logo pensei em criar um sistema que eu pudesse resolver esse problema. 
 Utilizarei PHP Laravel para criar esse sistema, para uma loja/oficina de motos. O sistema terá telas administrativas e PDV para venda de balcão. 
