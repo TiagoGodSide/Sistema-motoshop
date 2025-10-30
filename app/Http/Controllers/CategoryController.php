@@ -24,19 +24,43 @@ class CategoryController extends Controller
     {
         $data = $request->validate(['name'=>['required','string','max:100','unique:categories,name']]);
         $cat = Category::create($data);
-        return response()->json($cat, 201);
+
+       // return response()->json($cat, 201);
+
+       return $request->wantsJson()
+        ? response()->json($cat, 201)
+        : redirect()->route('categories.index')->with('ok', 'Categoria adicionada.');
     }
 
     public function update(Request $request, Category $category)
     {
         $data = $request->validate(['name'=>['required','string','max:100',"unique:categories,name,{$category->id}"]]);
         $category->update($data);
-        return response()->json($category);
+
+       // return response()->json($category);
+
+       return $request->wantsJson()
+        ? response()->json(['ok'=>true])
+        : back()->with('ok','Categoria atualizada.');
     }
 
-    public function destroy(Category $category)
-    {
-        $category->update(['is_active' => false]);
-        return response()->json(['ok'=>true]);
-    }
+    public function destroy(Request $request, Category $category)
+{
+    $category->delete();
+
+    return $request->wantsJson()
+        ? response()->json(['ok'=>true])
+        : back()->with('ok','Categoria removida.');
+}
+
+public function toggle(Request $r, \App\Models\Category $category)
+{
+    $category->is_active = ! $category->is_active;
+    $category->save();
+
+    return $r->wantsJson()
+        ? response()->json(['ok'=>true])
+        : back()->with('ok', 'Categoria '.($category->is_active?'ativada':'inativada').'.');
+}
+
 }

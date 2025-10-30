@@ -13,13 +13,26 @@
     @endif
     <a href="{{ route('orders.index') }}" class="btn btn-light">Voltar</a>
   </div>
-      @if($order->status==='draft')
-      <form action="{{ route('orders.finalize',$order) }}" method="POST" class="d-inline">@csrf
-        <input type="hidden" name="payment_method" value="dinheiro">
-        <input type="hidden" name="lowered_stock" value="1">
-        <button class="btn btn-success"><i class="bi bi-cash-coin"></i> Finalizar venda</button>
-      </form>
-    @endif
+           @if($order->status==='draft')
+              <form action="{{ route('orders.finalize',$order) }}" method="POST" class="d-inline-flex align-items-center gap-2">
+                @csrf
+                <select name="payment_method" class="form-select form-select-sm w-auto">
+                  @foreach(config('payment.methods', ['dinheiro'=>'Dinheiro','pix'=>'PIX','cartao'=>'Cartão','outro'=>'Outro']) as $val=>$label)
+                    <option value="{{ $val }}">{{ $label }}</option>
+                  @endforeach
+                </select>
+
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" name="lowered_stock" value="1" id="finalLowered" checked>
+                  <label class="form-check-label small" for="finalLowered">Dar baixa</label>
+                </div>
+
+                <button class="btn btn-success btn-sm">
+                  <i class="bi bi-cash-coin"></i> Finalizar venda
+                </button>
+              </form>
+            @endif
+
         <a href="{{ route('orders.receipt',$order) }}" target="_blank" class="btn btn-outline-secondary d-print-none">
           <i class="bi bi-printer"></i> Cupom
         </a>
@@ -33,7 +46,7 @@
         <dl class="row mb-0">
           <dt class="col-5">Número</dt><dd class="col-7">{{ $order->number }}</dd>
           <dt class="col-5">Data</dt><dd class="col-7">{{ $order->created_at->format('d/m/Y H:i') }}</dd>
-          <dt class="col-5">Cliente</dt><dd class="col-7">{{ $order->customer_name ?? '—' }}</dd>
+          <p><strong>Cliente:</strong>{{ $order->customer->name ?? $order->customer_name ?? '—' }}</p>
           <dt class="col-5">Vendedor</dt><dd class="col-7">{{ optional($order->user)->name ?? '—' }}</dd>
           <dt class="col-5">Status</dt>
           <dd class="col-7">

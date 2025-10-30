@@ -42,32 +42,33 @@ class OrderController extends Controller
     }
 
     /** Cancela e estorna estoque (se a venda havia baixado) */
-    public function cancel(Order $order, Request $request)
-    {
-        abort_if($order->status !== 'paid', 422, 'Apenas pedidos pagos podem ser cancelados.');
+    public function cancel(\App\Models\Order $order)
+{
+    abort_if($order->status === 'canceled', 422, 'Pedido já cancelado.');
 
-        DB::transaction(function () use ($order, $request) {
-            $order->update(['status' => 'cancelled']);
-
-            if ($order->lowered_stock) {
-                foreach ($order->items as $it) {
-                    $product = Product::lockForUpdate()->find($it->product_id);
-                    $product->increment('stock', $it->qty);
-
-                    StockMovement::create([
-                        'product_id' => $product->id,
-                        'type'       => 'IN',
-                        'qty'        => $it->qty,
-                        'unit_price' => $it->price,
-                        'reason'     => 'Cancelamento '.$order->number,
-                        'user_id'    => optional($request->user())->id,
-                    ]);
+    DB::transaction(function () use ($order) {
+        // Se houve baixa na finalização e ainda não foi revertida, repõe o estoque
+        if ($order->lowered_stock && is_null($order->stock_reverted_at)) {
+            foreach ($order->items as $it) {
+                if ($it->product_id && $it->qty > 0) {
+                    \App\Models\Product::where('id',$it->product_id)->lockForUpdate()->increment('stock', $it->qty);
                 }
             }
-        });
+            $order->stock_reverted_at = now();
+            $order->lowered_stock     = false; // estado atual: sem baixa válida
+        }
 
-        return response()->json(['ok' => true]);
+        $order->status = 'canceled';
+        $order->save();
+    });
+
+    // HTML
+    if (!request()->wantsJson()) {
+        return back()->with('ok', 'Pedido cancelado e estoque ajustado.');
     }
+    // API
+   // return response()->json(['ok'=>true]);
+}
 
 
     public function finalize(Order $order, Request $request)
@@ -78,11 +79,11 @@ class OrderController extends Controller
         'payment_method' => ['required','in:dinheiro,pix,cartao,outro'],
         'lowered_stock'  => ['nullable','boolean'],
     ]);
-
+    $method = strtolower(trim($data['payment_method']));
     DB::transaction(function () use ($order, $request, $data) {
-        $order->update([
+                $order->update([
             'status' => 'paid',
-            'payment_method' => $data['payment_method'],
+            'payment_method' => $method,   // << normalizado
             'lowered_stock'  => (bool)($data['lowered_stock'] ?? true),
         ]);
 
@@ -128,6 +129,19 @@ class OrderController extends Controller
         ? QrCode::size(168)->margin(0)->generate($pixPayload)
         : null;
 
+        // PIX: exibe QR se houver QUALQUER pagamento em pix
+        $hasPix = $order->payments->where('method','pix')->sum('amount') > 0
+                || strtolower((string)$order->payment_method)==='pix';
+
+        $pixPayload = $hasPix ? Pix::payload($order->total, $order->number, 'Pedido '.$order->number) : null;
+        $qrSvg = $hasPix ? QrCode::size(168)->margin(0)->generate($pixPayload) : null;
+
+        return view('orders.receipt', compact('order','pixPayload','qrSvg','hasPix'));
+        }
+
+        public function receiptSimple(Order $order) {
+        $order->load('items.product','payments','user');
+        return view('orders.receipt_simple', compact('order'));
     return view('orders.receipt', compact('order','pixPayload','qrSvg'));
 }
 }

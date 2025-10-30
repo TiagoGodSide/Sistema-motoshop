@@ -26,7 +26,7 @@
 
   <div class="small">Pedido: <span class="bold">{{ $order->number }}</span></div>
   <div class="small">Data: {{ $order->created_at->format('d/m/Y H:i') }}</div>
-  <div class="small">Cliente: {{ $order->customer_name ?? '—' }}</div>
+  <div class="small">Cliente: {{ $order->customer->name ?? $order->customer_name ?? '—' }}</div>
   <hr>
 
   @foreach($order->items as $it)
@@ -45,25 +45,46 @@
   <div class="row small"><div>Subtotal</div><div>R$ {{ number_format($order->subtotal,2,',','.') }}</div></div>
   <div class="row small"><div>Desconto</div><div>- R$ {{ number_format($order->discount,2,',','.') }}</div></div>
   <div class="row bold"><div>Total</div><div>R$ {{ number_format($order->total,2,',','.') }}</div></div>
-  <div class="small">Pagamento: {{ $order->payment_method ? ucfirst($order->payment_method) : '—' }}</div>
 
-  @if($order->payment_method === 'pix')
+  {{-- Pagamentos (suporta split) --}}
+  @if($order->payments && $order->payments->count())
+    <div class="small" style="margin-top:2px">Pagamentos:</div>
+    @foreach($order->payments as $p)
+      <div class="row small"><div>{{ ucfirst($p->method) }}</div><div>R$ {{ number_format($p->amount,2,',','.') }}</div></div>
+    @endforeach
+  @elseif($order->payment_method)
+    <div class="small">Pagamento: {{ ucfirst($order->payment_method) }}</div>
+  @endif
+
+  {{-- PIX (se houver qualquer parte em pix) --}}
+  @php
+    $pm = strtolower(trim((string)$order->payment_method));
+    $hasPixLocal = ($pm === 'pix') || ($order->payments && $order->payments->where('method','pix')->sum('amount') > 0);
+  @endphp
+  @if($hasPixLocal && isset($pixPayload))
     <hr>
     <div class="center small bold">PAGAMENTO PIX</div>
 
-    {{-- Opção A: usamos o $qrSvg gerado no controller --}}
-    @isset($qrSvg)
+    @if(isset($qrSvg) && $qrSvg)
       <div class="center" style="margin:6px 0">{!! $qrSvg !!}</div>
-      @else
-        {{-- Opção B: gerar aqui no Blade (sem alterar config/app.php) --}}
-        <div class="center" style="margin:6px 0">
-          {!! \SimpleSoftwareIO\QrCode\Facades\QrCode::size(168)->margin(0)->generate($pixPayload) !!}
-        </div>
-      @endisset
-
+    @else
+      <div class="center" style="margin:6px 0">
+        {!! \SimpleSoftwareIO\QrCode\Facades\QrCode::size(168)->margin(0)->generate($pixPayload) !!}
+      </div>
+    @endif
 
     <div class="small">Copia e cola:</div>
-    <div class="small" style="word-break:break-all">{{ $pixPayload }}</div>
+    <div class="small" id="pix-payload" style="word-break:break-all">{{ $pixPayload }}</div>
+    <div class="no-print center" style="margin-top:6px">
+      <button id="btn-copy-pix" class="btn">Copiar PIX</button>
+    </div>
+    <script>
+      document.getElementById('btn-copy-pix')?.addEventListener('click', async ()=>{
+        const t = document.getElementById('pix-payload')?.innerText?.trim() || '';
+        try { await navigator.clipboard.writeText(t); alert('Copia e cola copiado!'); }
+        catch { alert('Não foi possível copiar automaticamente. Selecione e copie manualmente.'); }
+      });
+    </script>
   @endif
 
   <hr>

@@ -16,4 +16,19 @@ class StockMovement extends Model
     ];
 
     public function product() { return $this->belongsTo(Product::class); }
+
+    public const REASONS = [
+    'inventory' => 'Inventário/Acerto',
+    'loss'      => 'Perda/Quebra',
+    'exchange'  => 'Troca/Devolução',
+    'gift'      => 'Brinde',
+    'other'     => 'Outro',
+    ];
+
+    public function getReasonLabelAttribute(): string
+    {
+        return self::REASONS[$this->reason_code ?? ''] ?? ($this->reason ?: '—');
+    }
+
+
 }

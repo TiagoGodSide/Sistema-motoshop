@@ -14,6 +14,11 @@
     <div class="col-auto">
       <button class="btn btn-dark mt-4">Abrir caixa</button>
     </div>
+    <div class="mb-2">
+      <label class="form-label">Observação da abertura (opcional)</label>
+      <textarea name="open_note" class="form-control" rows="2" placeholder="Ex.: Troca de turno, fundo de caixa..."></textarea>
+    </div>
+
   </form>
 @else
   <div class="alert alert-success">Caixa aberto em {{ $open->opened_at->format('d/m/Y H:i') }} | Fundo R$ {{ number_format($open->opening_amount,2,',','.') }}</div>
@@ -45,6 +50,10 @@
 
   <form method="POST" action="{{ route('cash.close') }}" class="mb-3">@csrf
     <button class="btn btn-danger">Fechar caixa</button>
+    <div class="mb-2">
+      <label class="form-label">Observação do fechamento (opcional)</label>
+      <textarea name="close_note" class="form-control" rows="2" placeholder="Ex.: Conferido com o gerente, divergência..."></textarea>
+    </div>
   </form>
 @endif
 
