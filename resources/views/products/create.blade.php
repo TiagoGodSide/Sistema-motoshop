@@ -54,7 +54,9 @@
   </div>
 
   <div class="col-12">
-    <button class="btn btn-dark">Salvar</button>
+    <x-button type="submit">
+    {{ __('ui.save') }}
+</x-button>
     <a href="{{ route('products.index') }}" class="btn btn-outline-secondary">Cancelar</a>
   </div>
 </form>

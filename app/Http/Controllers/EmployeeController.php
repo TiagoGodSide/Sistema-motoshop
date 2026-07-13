@@ -66,4 +66,18 @@ public function update(Request $request, \App\Models\User $employee)
     return redirect()->route('employees.index')->with('ok','Dados atualizados.');
 }
 
+        public function deactivate(User $user)
+{
+    $user->update(['active' => false]);
+
+    return back()->with('ok', 'Funcionário inativado com sucesso.');
+}
+
+        public function activate(User $user)
+{
+    $user->update(['active' => true]);
+
+    return back()->with('ok', 'Funcionário ativado com sucesso.');
+}
+
 }

@@ -20,7 +20,7 @@
   </div>
 @endif
 
-<form method="POST" action="{{ route('products.import.process') }}" enctype="multipart/form-data" class="row g-3">
+<form method="POST" action="{{ route('products.import') }}" enctype="multipart/form-data" class="row g-3">
   @csrf
   <div class="col-md-6">
     <label class="form-label">Arquivo CSV</label>

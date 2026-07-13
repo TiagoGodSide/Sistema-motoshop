@@ -50,6 +50,7 @@
             </span>
           </a>
         </li>
+        <li class="nav-item"><a class="nav-link {{ request()->is('profile*') ? 'active' : '' }}" href="{{ route('profile.edit') }}"> <i class="bi bi-person"></i> Meu Perfil</a></li>
       </ul>
 
       <div class="d-flex align-items-center gap-2">
@@ -64,7 +65,7 @@
 
 <main class="container py-3">
   {{-- ✅ Apenas UM include de flash e UM yield --}}
-  @include('partials.flash')
+  <x-alert type="success" :message="session('success')" />
   @yield('content')
 </main>
 

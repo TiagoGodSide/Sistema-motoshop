@@ -70,6 +70,47 @@ class ProductController extends Controller
             }, 'produtos_abaixo_minimo.csv', ['Content-Type'=>'text/csv; charset=UTF-8']);
         }
 
+        public function exportLowStockCsv()
+{
+    $products = Product::whereNotNull('min_stock')
+        ->whereColumn('stock', '<', 'min_stock')
+        ->orderBy('name')
+        ->get();
+
+    $headers = [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => 'attachment; filename=produtos-abaixo-minimo.csv',
+    ];
+
+    $callback = function () use ($products) {
+        $out = fopen('php://output', 'w');
+
+        // Cabeçalho do CSV
+        fputcsv($out, [
+            'Produto',
+            'SKU',
+            'Estoque',
+            'Estoque mínimo',
+            'Preço'
+        ], ';');
+
+        foreach ($products as $p) {
+            fputcsv($out, [
+                $p->name,
+                $p->sku,
+                $p->stock,
+                $p->min_stock,
+                number_format($p->price, 2, ',', '.'),
+            ], ';');
+        }
+
+        fclose($out);
+    };
+
+    return response()->stream($callback, 200, $headers);
+}
+
+
 
    /** Salvar novo */
     public function store(Request $request)
@@ -229,12 +270,50 @@ class ProductController extends Controller
                 fputcsv($out, ['Óleo 10W40','OLEO10W40','','','49,90','39,00','24','2','UN','Óleos e Lubrificantes','1'], ';');
                 fclose($out);
             }, 'products_template.csv', ['Content-Type'=>'text/csv; charset=UTF-8']);
+             $headers = [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => 'attachment; filename="modelo-produtos.csv"',
+    ];
+
+    $columns = [
+        'name',
+        'sku',
+        'ean',
+        'price',
+        'stock',
+        'min_stock',
+        'category',
+    ];
+
+    $callback = function () use ($columns) {
+        $file = fopen('php://output', 'w');
+
+        // Cabeçalho
+        fputcsv($file, $columns, ';');
+
+        // Linha de exemplo (opcional)
+        fputcsv($file, [
+            'Óleo 10W40',
+            'OLEO-10W40',
+            '7890000000000',
+            '49.90',
+            '10',
+            '3',
+            'Lubrificantes'
+        ], ';');
+
+        fclose($file);
+    };
+
+    return response()->stream($callback, 200, $headers);
         }
 
         public function importForm()
         {
             return view('products.import');
         }
+
+        
 
         public function importProcess(Request $request)
         {
@@ -391,15 +470,16 @@ class ProductController extends Controller
 
     public function history(Product $product)
 {
-    // últimos 100 movimentos
-    $moves = StockMovement::where('product_id',$product->id)
-        ->latest('id')->limit(100)->get();
+    $movements = StockMovement::where('product_id', $product->id)
+        ->orderByDesc('created_at')
+        ->paginate(15); // ✅ agora é paginator
 
-    // últimas 50 mudanças de preço
-    $prices = ProductPriceHistory::where('product_id',$product->id)
-        ->latest('id')->limit(50)->get();
+    $prices = ProductPriceHistory::where('product_id', $product->id)
+        ->orderByDesc('created_at')
+        ->limit(50)
+        ->get();
 
-    return view('products.history', compact('product','moves','prices'));
+    return view('products.history', compact('product', 'movements', 'prices'));
 }
 
     public function historyCsv(Product $product): \Symfony\Component\HttpFoundation\StreamedResponse

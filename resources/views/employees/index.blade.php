@@ -18,7 +18,7 @@
   <table class="table table-sm table-hover align-middle">
     <thead class="table-light">
       <tr>
-        <th>Nome</th><th>Email</th><th>Função</th><th class="text-end">Editar</th>
+        <th>Nome</th><th>Email</th><th>Função</th><th>Status</th><th class="text-end">Editar</th>
       </tr>
     </thead>
     <tbody>
@@ -27,18 +27,73 @@
           <td>{{ $u->name }}</td>
           <td>{{ $u->email }}</td>
           <td>{{ $u->roles->pluck('name')->join(', ') }}</td>
+          <td>
+            @if($u->active)
+              <span class="badge bg-success">Ativo</span>
+            @else
+              <span class="badge bg-danger">Inativo</span>
+            @endif
+          </td>
           <td class="text-end">
+            {{-- FORM DE EDIÇÃO --}}
             <form method="POST" action="{{ route('employees.update',$u) }}" class="d-inline">
-              @csrf @method('PUT')
-              <input type="text"  name="name"  value="{{ $u->name }}"  class="form-control form-control-sm d-inline-block" style="width:150px">
-              <input type="email" name="email" value="{{ $u->email }}" class="form-control form-control-sm d-inline-block" style="width:200px">
-              <select name="role" class="form-select form-select-sm d-inline-block" style="width:150px">
+              @csrf
+              @method('PUT')
+
+              <input type="text"
+                    name="name"
+                    value="{{ $u->name }}"
+                    class="form-control form-control-sm d-inline-block"
+                    style="width:150px">
+
+              <input type="email"
+                    name="email"
+                    value="{{ $u->email }}"
+                    class="form-control form-control-sm d-inline-block"
+                    style="width:200px">
+
+              <select name="role"
+                      class="form-select form-select-sm d-inline-block"
+                      style="width:150px">
                 @foreach(['admin','gerente','vendedor','estoque'] as $r)
-                  <option value="{{ $r }}" {{ $u->roles->contains('name',$r)?'selected':'' }}>{{ ucfirst($r) }}</option>
+                  <option value="{{ $r }}" {{ $u->roles->contains('name',$r)?'selected':'' }}>
+                    {{ ucfirst($r) }}
+                  </option>
                 @endforeach
               </select>
-              <button class="btn btn-sm btn-outline-secondary">Salvar</button>
+
+              <button class="btn btn-sm btn-outline-secondary">
+                Salvar
+              </button>
             </form>
+
+           {{-- ATIVAR / INATIVAR --}}
+          @if(auth()->id() !== $u->id)
+            @if($u->active)
+              <form action="{{ route('employees.deactivate', $u) }}"
+                    method="POST"
+                    class="d-inline"
+                    onsubmit="return confirm('Deseja INATIVAR este funcionário?')">
+                @csrf
+                @method('PATCH')
+                <button class="btn btn-sm btn-warning">
+                  Inativar
+                </button>
+              </form>
+            @else
+              <form action="{{ route('employees.activate', $u) }}"
+                    method="POST"
+                    class="d-inline"
+                    onsubmit="return confirm('Deseja ATIVAR este funcionário?')">
+                @csrf
+                @method('PATCH')
+                <button class="btn btn-sm btn-success">
+                  Ativar
+                </button>
+              </form>
+            @endif
+          @endif
+
           </td>
         </tr>
       @endforeach

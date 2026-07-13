@@ -7,6 +7,8 @@ use App\Http\Controllers\{
     CustomerController, ReportController
 };
 use App\Http\Controllers\ServiceOrderController;
+use App\Http\Controllers\ProfileController;
+
 
 // Auth (Breeze/Jetstream)
 require __DIR__.'/auth.php';
@@ -66,6 +68,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('products.import');
         Route::get('/products/export.csv', [ProductController::class,'exportCsv'])
             ->name('products.export.csv');
+        Route::get('/products/low-stock.csv', 
+                [ProductController::class, 'exportLowStockCsv']
+                 )->name('products.low.csv');
+                 Route::get('/products/template.csv', [ProductController::class, 'templateCsv'])
+            ->name('products.template.csv');
+
 
         Route::resource('products', ProductController::class)->except(['show','destroy']);
 
@@ -118,5 +126,20 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('employees', EmployeeController::class)
             ->parameters(['employees' => 'employee'])
             ->except(['create','edit','show']);
+    Route::patch('/employees/{user}/deactivate', [EmployeeController::class, 'deactivate'])
+    ->name('employees.deactivate');
+
+    Route::patch('/employees/{user}/activate', [EmployeeController::class, 'activate'])
+    ->name('employees.activate');
+
     });
+
+    Route::middleware('auth')->group(function () {
+    Route::get('/meu-perfil', [ProfileController::class, 'edit'])
+        ->name('profile.edit');
+
+    Route::put('/meu-perfil', [ProfileController::class, 'update'])
+        ->name('profile.update');
+});
+
 });
