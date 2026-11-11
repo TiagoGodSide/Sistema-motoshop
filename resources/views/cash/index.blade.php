@@ -7,16 +7,17 @@
 
 @if(!$open)
   <form class="row g-2 mb-3" method="POST" action="{{ route('cash.open') }}">@csrf
+    <input type="hidden" name="idempotency_key" value="{{ old('idempotency_key', $openingKey) }}">
     <div class="col-auto">
       <label class="form-label">Fundo de troco</label>
-      <input type="number" step="0.01" name="opening_amount" class="form-control" value="0">
+      <input type="number" step="0.01" min="0" max="99999999.99" name="opening_amount" class="form-control" value="{{ old('opening_amount', 0) }}">
     </div>
     <div class="col-auto">
       <button class="btn btn-dark mt-4">Abrir caixa</button>
     </div>
     <div class="mb-2">
       <label class="form-label">Observação da abertura (opcional)</label>
-      <textarea name="open_note" class="form-control" rows="2" placeholder="Ex.: Troca de turno, fundo de caixa..."></textarea>
+      <textarea name="open_notes" class="form-control" rows="2" maxlength="2000" placeholder="Ex.: Troca de turno, fundo de caixa...">{{ old('open_notes') }}</textarea>
     </div>
 
   </form>

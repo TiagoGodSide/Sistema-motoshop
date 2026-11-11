@@ -4,37 +4,34 @@ namespace App\Http\Controllers;
 
 use App\Models\CashRegister;
 use App\Models\CashMovement;
+use App\Services\FinancialCoordinator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CashRegisterController extends Controller
 {
-    public function index() {
+    public function index(Request $request) {
         $open = CashRegister::open()->latest('id')->first();
         $history = CashRegister::latest('id')->limit(10)->get();
-        return view('cash.index', compact('open','history'));
+        $openingKey = $request->session()->get('cash.opening_key');
+        if (! $open && ! $openingKey) {
+            $openingKey = (string) Str::uuid();
+            $request->session()->put('cash.opening_key', $openingKey);
+        }
+        return view('cash.index', compact('open','history','openingKey'));
     }
 
-    public function open(Request $r) {
-        $data = $r->validate(['opening_amount'=>['nullable','numeric','min:0']]);
-        abort_if(CashRegister::open()->exists(), 422, 'Já existe um caixa aberto.');
-        $reg = CashRegister::create([
-            'opening_amount' => $data['opening_amount'] ?? 0,
-            'status' => 'open',
-            'user_opened_id' => optional($r->user())->id,
-            'initial_amount' => 'nullable|numeric|min:0',
-            'open_note'      => 'nullable|string|max:2000',
-        ]);
-
-            $reg = \App\Models\CashRegister::create([
-        'opened_at'     => now(),
-        'opened_by'     => $r->user()->id ?? null,
-        'initial_amount'=> $data['initial_amount'] ?? 0,
-        'open_note'     => $data['open_note'] ?? null,
-        'status'        => 'open',
-        ]);
-        return redirect()->route('cash.index')->with('ok','Caixa aberto.');
+    public function open(Request $r, FinancialCoordinator $coordinator) {
+        $result = $coordinator->open($r->user(), $r->only(['idempotency_key', 'opening_amount', 'open_notes']));
+        if ($r->session()->get('cash.opening_key') === strtolower((string) $r->input('idempotency_key'))) {
+            $r->session()->forget('cash.opening_key');
+        }
+        $message = $result['replayed']
+            ? 'Abertura do caixa #'.$result['cash_register_id'].' já registrada.'
+            : 'Caixa #'.$result['cash_register_id'].' aberto.';
+        return redirect()->route('cash.index')->with('ok', $message);
     }
 
     public function close(Request $r) {
