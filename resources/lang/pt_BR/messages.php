@@ -1,3 +1,5 @@
+<?php
+
 return [
     'not_found' => 'Página não encontrada.',
     'forbidden' => 'Você não tem permissão para acessar esta página.',

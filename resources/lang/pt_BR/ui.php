@@ -1,3 +1,5 @@
+<?php
+
 return [
     'products' => 'Produtos',
     'orders' => 'Pedidos',
@@ -5,4 +7,5 @@ return [
     'reports' => 'Relatórios',
     'cash' => 'Caixa',
     'profile' => 'Meu Perfil',
+    'save' => 'Salvar',
 ];
