@@ -47,7 +47,7 @@ class AuthorizationTest extends TestCase
                 'reports.sales.products', 'reports.sales.products.csv', 'reports.sales.categories',
                 'reports.sales.categories.csv', 'reports.stock.history', 'reports.stock.history.csv',
                 'reports.customers', 'reports.customers.csv'], ['admin', 'gerente']],
-            [['employees.index', 'employees.store', 'employees.update', 'employees.destroy',
+            [['employees.index', 'employees.store', 'employees.update',
                 'employees.deactivate', 'employees.activate'], ['admin']],
         ];
     }

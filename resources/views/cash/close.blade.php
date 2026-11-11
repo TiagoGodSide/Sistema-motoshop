@@ -47,6 +47,9 @@
   </div>
 </div>
 <form method="POST" action="{{ route('cash.close') }}" class="mt-2">@csrf
+  <a href="{{ route('cash.close.print') }}" target="_blank" class="btn btn-outline-secondary">
+    <i class="bi bi-printer"></i> Imprimir fechamento
+  </a>
   <a href="{{ route('cash.close.export') }}" class="btn btn-outline-secondary">
     <i class="bi bi-download"></i> Exportar CSV
   </a>

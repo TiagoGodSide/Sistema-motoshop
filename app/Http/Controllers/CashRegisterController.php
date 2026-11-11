@@ -77,83 +77,79 @@ class CashRegisterController extends Controller
         return back()->with('ok','Lançamento registrado.');
     }
 
-    public function closePreview(){
-        $reg = CashRegister::open()->latest('id')->firstOrFail();
+    public function closePreview()
+    {
+        return view('cash.close', $this->closingSummary());
+    }
 
-        $byMethod = CashMovement::where('cash_register_id',$reg->id)
-            ->select('payment_method',
-            DB::raw("SUM(CASE WHEN type='IN' THEN amount ELSE 0 END) as entradas"),
-            DB::raw("SUM(CASE WHEN type='OUT' THEN amount ELSE 0 END) as saidas")
+    public function closePrint()
+    {
+        return view('cash.close_print', $this->closingSummary());
+    }
+
+    private function closingSummary(): array
+    {
+        $reg = CashRegister::with(['openedBy', 'closedBy'])->open()->latest('id')->firstOrFail();
+
+        $byMethod = CashMovement::where('cash_register_id', $reg->id)
+            ->select(
+                'payment_method',
+                DB::raw("SUM(CASE WHEN type='IN' THEN amount ELSE 0 END) as entradas"),
+                DB::raw("SUM(CASE WHEN type='OUT' THEN amount ELSE 0 END) as saidas"),
+                DB::raw("SUM(CASE WHEN type='IN' THEN amount ELSE -amount END) as saldo")
             )
             ->groupBy('payment_method')
             ->orderBy('payment_method')
             ->get();
 
-        $sangrias = CashMovement::where('cash_register_id',$reg->id)
-            ->where('type','OUT')
-            ->where('reason','like','%Sangria%')
+        $sangrias = CashMovement::where('cash_register_id', $reg->id)
+            ->where('type', 'OUT')
+            ->where('reason', 'like', '%Sangria%')
             ->sum('amount');
 
-        $totalMov = CashMovement::where('cash_register_id',$reg->id)
+        $totalMov = CashMovement::where('cash_register_id', $reg->id)
             ->selectRaw("SUM(CASE WHEN type='IN' THEN amount ELSE -amount END) as total")
-            ->value('total');
+            ->value('total') ?? 0;
 
-        $prevClosing = $reg->opening_amount + ($totalMov ?? 0);
+        // Vendas já estão nos movimentos. Somar pedidos novamente duplicaria entradas.
+        $prevClosing = (float) $reg->opening_amount + (float) $totalMov;
 
-        return view('cash.close', compact('reg','byMethod','sangrias','prevClosing'));
-        }
+        return compact('reg', 'byMethod', 'sangrias', 'prevClosing');
+    }
 
-            public function exportCsv(): StreamedResponse
-{
-            $reg = \App\Models\CashRegister::open()->latest('id')->firstOrFail();
+    public function exportCsv(): StreamedResponse
+    {
+        [
+            'reg' => $reg,
+            'byMethod' => $byMethod,
+            'sangrias' => $sangrias,
+            'prevClosing' => $prevClosing,
+        ] = $this->closingSummary();
 
-            $byMethod = \App\Models\CashMovement::where('cash_register_id',$reg->id)
-                ->select(
-                    'payment_method',
-                    DB::raw("SUM(CASE WHEN type='IN'  THEN amount ELSE 0 END) as entradas"),
-                    DB::raw("SUM(CASE WHEN type='OUT' THEN amount ELSE 0 END) as saidas"),
-                    DB::raw("SUM(CASE WHEN type='IN'  THEN amount ELSE -amount END) as saldo")
-                )
-                ->groupBy('payment_method')
-                ->orderBy('payment_method')
-                ->get();
+        $filename = 'fechamento_caixa_'.$reg->id.'.csv';
 
-            $sangrias = \App\Models\CashMovement::where('cash_register_id',$reg->id)
-                ->where('type','OUT')->where('reason','like','%Sangria%')->sum('amount');
+        return response()->streamDownload(function () use ($reg, $byMethod, $sangrias, $prevClosing) {
+            $out = fopen('php://output', 'w');
+            fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
+            $csv = fn ($row) => fputcsv($out, $row, ';');
 
-            $movTotal = \App\Models\CashMovement::where('cash_register_id',$reg->id)
-                ->selectRaw("SUM(CASE WHEN type='IN' THEN amount ELSE -amount END) as total")
-                ->value('total') ?? 0;
+            $csv(['Fechamento do Caixa', '#'.$reg->id]);
+            $csv(['Aberto em', optional($reg->opened_at)->format('d/m/Y H:i')]);
+            $csv(['Fundo de troco', number_format($reg->opening_amount, 2, ',', '.')]);
+            $csv(['Sangrias', number_format($sangrias, 2, ',', '.')]);
+            $csv(['Previsão de fechamento', number_format($prevClosing, 2, ',', '.')]);
+            $csv(['']);
+            $csv(['Método', 'Entradas', 'Saídas', 'Saldo']);
 
-            $prevClosing = (float)$reg->opening_amount + (float)$movTotal;
-
-            $filename = 'fechamento_caixa_'.$reg->id.'.csv';
-
-            return response()->streamDownload(function() use ($reg,$byMethod,$sangrias,$prevClosing) {
-                $out = fopen('php://output','w');
-                // BOM p/ Excel
-                fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
-                $csv = fn($row) => fputcsv($out, $row, ';');
-
-                $csv(['Fechamento do Caixa', '#'.$reg->id]);
-                $csv(['Aberto em', optional($reg->opened_at)->format('d/m/Y H:i')]);
-                $csv(['Fundo de troco', number_format($reg->opening_amount,2,',','.')]);
-                $csv(['Sangrias', number_format($sangrias,2,',','.')]);
-                $csv(['Previsão de fechamento', number_format($prevClosing,2,',','.')]);
-                $csv(['']); // linha em branco
-                $csv(['Método','Entradas','Saídas','Saldo']);
-
-                foreach ($byMethod as $r) {
-                    $csv([
-                        $r->payment_method ? ucfirst($r->payment_method) : '—',
-                        number_format($r->entradas,2,',','.'),
-                        number_format($r->saidas,2,',','.'),
-                        number_format($r->saldo,2,',','.')
-                    ]);
-                }
-                fclose($out);
-            }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
-}
-
-
+            foreach ($byMethod as $row) {
+                $csv([
+                    $row->payment_method ? ucfirst($row->payment_method) : '—',
+                    number_format($row->entradas, 2, ',', '.'),
+                    number_format($row->saidas, 2, ',', '.'),
+                    number_format($row->saldo, 2, ',', '.'),
+                ]);
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
 }

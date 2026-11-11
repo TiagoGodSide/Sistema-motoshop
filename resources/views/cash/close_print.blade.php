@@ -34,22 +34,21 @@
 
   <div class="row small"><div>Valor de abertura</div><div>R$ {{ number_format((float)($reg->opening_amount ?? 0),2,',','.') }}</div></div>
 
-  @php
-    $dinheiro = (float)($totalsByMethod['dinheiro'] ?? 0);
-    $esperado = (float)($reg->opening_amount ?? 0) + $dinheiro + (float)($sumIn ?? 0) - (float)($sumOut ?? 0);
-  @endphp
-
-  <div class="row small"><div>Entradas (mov.)</div><div>R$ {{ number_format((float)($sumIn ?? 0),2,',','.') }}</div></div>
-  <div class="row small"><div>Saídas (mov.)</div><div>R$ {{ number_format((float)($sumOut ?? 0),2,',','.') }}</div></div>
-  <div class="row bold"><div>Dinheiro esperado*</div><div>R$ {{ number_format($esperado,2,',','.') }}</div></div>
-  <div class="small">*Ajuste a fórmula conforme sua regra.</div>
+  <div class="row small"><div>Entradas (mov.)</div><div>R$ {{ number_format($byMethod->sum('entradas'),2,',','.') }}</div></div>
+  <div class="row small"><div>Saídas (mov.)</div><div>R$ {{ number_format($byMethod->sum('saidas'),2,',','.') }}</div></div>
+  <div class="row small"><div>Sangrias</div><div>R$ {{ number_format($sangrias,2,',','.') }}</div></div>
+  <div class="row bold"><div>Previsão de fechamento</div><div>R$ {{ number_format($prevClosing,2,',','.') }}</div></div>
 
   <hr>
-  <div class="center small bold">Vendas por pagamento</div>
-  <div class="row small"><div>Dinheiro</div><div>R$ {{ number_format((float)($totalsByMethod['dinheiro'] ?? 0),2,',','.') }}</div></div>
-  <div class="row small"><div>PIX</div><div>R$ {{ number_format((float)($totalsByMethod['pix'] ?? 0),2,',','.') }}</div></div>
-  <div class="row small"><div>Cartão</div><div>R$ {{ number_format((float)($totalsByMethod['cartao'] ?? 0),2,',','.') }}</div></div>
-  <div class="row small"><div>Outros</div><div>R$ {{ number_format((float)($totalsByMethod['outro'] ?? 0),2,',','.') }}</div></div>
+  <div class="center small bold">Movimentações por pagamento</div>
+  @forelse($byMethod as $row)
+    <div class="small bold">{{ $row->payment_method ? ucfirst($row->payment_method) : '—' }}</div>
+    <div class="row small"><div>Entradas</div><div>R$ {{ number_format($row->entradas,2,',','.') }}</div></div>
+    <div class="row small"><div>Saídas</div><div>R$ {{ number_format($row->saidas,2,',','.') }}</div></div>
+    <div class="row small"><div>Saldo</div><div>R$ {{ number_format($row->saldo,2,',','.') }}</div></div>
+  @empty
+    <div class="small">Sem movimentações.</div>
+  @endforelse
 
   @if(!empty($reg->close_notes))
     <hr>

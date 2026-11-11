@@ -66,7 +66,8 @@ Route::middleware(['auth', 'role:admin|gerente|vendedor|estoque'])->group(functi
 
     Route::get('/products/import', [ProductController::class, 'importForm'])
         ->middleware(['can:products.create', 'can:products.update'])->name('products.import.form');
-    Route::post('/products/import', [ProductController::class, 'import'])
+    // Pendente: revisar valores monetários, transações e históricos de preço/estoque da importação.
+    Route::post('/products/import', [ProductController::class, 'importProcess'])
         ->middleware(['can:products.create', 'can:products.update'])->name('products.import');
     Route::get('/products/export.csv', [ProductController::class, 'exportCsv'])
         ->middleware(['can:products.update'])->name('products.export.csv');
@@ -128,7 +129,8 @@ Route::middleware(['auth', 'role:admin|gerente|vendedor|estoque'])->group(functi
     Route::middleware('can:employees.manage')->group(function () {
         Route::resource('employees', EmployeeController::class)
             ->parameters(['employees' => 'employee'])
-            ->except(['create', 'edit', 'show']);
+            ->except(['create', 'edit', 'show', 'destroy']);
+        // Pendente: proteger autoinativação e preservar o último administrador ativo.
         Route::patch('/employees/{user}/deactivate', [EmployeeController::class, 'deactivate'])
             ->name('employees.deactivate');
 
