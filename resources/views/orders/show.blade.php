@@ -7,12 +7,15 @@
   <div class="d-print-none">
     <button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer"></i> Imprimir</button>
     @if($order->status==='paid')
-      <form action="{{ route('orders.cancel',$order) }}" method="POST" class="d-inline">@csrf
+      @can('orders.cancel')
+<form action="{{ route('orders.cancel',$order) }}" method="POST" class="d-inline">@csrf
         <button class="btn btn-outline-danger"><i class="bi bi-x-circle"></i> Cancelar</button>
       </form>
+@endcan
     @endif
     <a href="{{ route('orders.index') }}" class="btn btn-light">Voltar</a>
   </div>
+           @can('pos.sell')
            @if($order->status==='draft')
               <form action="{{ route('orders.finalize',$order) }}" method="POST" class="d-inline-flex align-items-center gap-2">
                 @csrf
@@ -32,6 +35,7 @@
                 </button>
               </form>
             @endif
+            @endcan
 
         <a href="{{ route('orders.receipt',$order) }}" target="_blank" class="btn btn-outline-secondary d-print-none">
           <i class="bi bi-printer"></i> Cupom

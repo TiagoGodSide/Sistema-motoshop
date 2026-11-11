@@ -5,9 +5,14 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4><i class="bi bi-box-seam"></i> Produtos</h4>
   <div class="btn-group">
+@can('products.create')
+@can('products.update')
     <a href="{{ route('products.import.form') }}" class="btn btn-outline-secondary">
       <i class="bi bi-upload"></i> Importar CSV
     </a>
+@endcan
+@endcan
+@can('products.update')
     <a href="{{ route('products.export.csv') }}" class="btn btn-outline-secondary">
       <i class="bi bi-download"></i> Exportar CSV
     </a>
@@ -20,9 +25,12 @@
             data-bs-toggle="modal" data-bs-target="#labelsBatchModal">
       <i class="bi bi-upc-scan"></i> Etiquetas (lote)
     </button>
+@endcan
+@can('products.create')
     <a href="{{ route('products.create') }}" class="btn btn-dark">
       <i class="bi bi-plus-lg"></i> Novo
     </a>
+@endcan
 
   </div>
 </div>
@@ -62,9 +70,11 @@
   <table class="table table-hover table-sm align-middle">
   <thead class="table-light">
     <tr>
+      @can('products.update')
       <th style="width:36px;">
         <input type="checkbox" id="chkAll"> {{-- seleciona todos --}}
       </th>
+      @endcan
       <th>Produto</th>
       <th>SKU</th>
       <th>Preço</th>
@@ -77,27 +87,40 @@
   <tbody>
     @foreach($products as $p)
       <tr>
+        @can('products.update')
         <td>
           <input type="checkbox"
                  class="row-chk"
                  value="{{ $p->id }}"
                  data-name="{{ $p->name }}">
         </td>
+        @endcan
         <td>{{ $p->name }}</td>
         <td>{{ $p->sku }}</td>
         <td>R$ {{ number_format($p->price,2,',','.') }}</td>
         <td>{{ $p->stock }}</td>
         <td><span class="kbd">{{ $p->internal_barcode }}</span></td>
         <td class="text-end">
+@can('products.update')
           <a href="{{ route('products.edit',$p) }}" class="btn btn-sm btn-outline-secondary">Editar</a>
+@endcan
+@can('products.update')
           <a href="{{ route('products.history',$p) }}" class="btn btn-sm btn-outline-secondary">Histórico</a>
+@endcan
+@can('products.update')
           <a href="{{ route('products.label',$p) }}" target="_blank" class="btn btn-sm btn-outline-primary">Etiqueta</a>
+@endcan
+@can('products.deactivate')
           <form action="{{ route('products.toggle',$p) }}" method="POST" class="d-inline">
             @csrf
             <button class="btn btn-sm btn-outline-{{ $p->is_active ? 'danger' : 'success' }}">
               {{ $p->is_active ? 'Inativar' : 'Ativar' }}
             </button>
           </form>
+@endcan
+          @can('stock.adjust')
+          <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#adjustStockModal{{ $p->id }}">Ajustar estoque</button>
+          @endcan
         </td>
       </tr>
     @endforeach
@@ -108,6 +131,13 @@
 
 {{ $products->links() }}
 
+@can('stock.adjust')
+@foreach($products as $product)
+@include('products.partials.adjust-stock')
+@endforeach
+@endcan
+
+    @can('products.update')
     <div class="modal fade" id="labelsBatchModal" tabindex="-1" aria-labelledby="labelsBatchLabel" aria-hidden="true">
       <div class="modal-dialog modal-lg">
         <form method="POST" action="{{ route('products.labels.batch') }}" class="modal-content">
@@ -300,4 +330,5 @@
           });
         </script>
     @endpush
+    @endcan
 @endsection

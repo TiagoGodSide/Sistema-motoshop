@@ -48,9 +48,11 @@
           <td class="text-end">
             <a href="{{ route('orders.show',$o) }}" class="btn btn-sm btn-outline-primary">Ver</a>
             @if($o->status==='paid')
-              <form method="POST" action="{{ route('orders.cancel',$o) }}" class="d-inline">@csrf
+              @can('orders.cancel')
+<form method="POST" action="{{ route('orders.cancel',$o) }}" class="d-inline">@csrf
                 <button class="btn btn-sm btn-outline-danger">Cancelar</button>
               </form>
+@endcan
             @endif
           </td>
         </tr>

@@ -22,25 +22,27 @@
 
     <div class="collapse navbar-collapse" id="topnav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        @hasanyrole('admin|gerente|vendedor|estoque')
+        @can('pos.sell')
         <li class="nav-item"><a class="nav-link {{ request()->is('pos*')?'active':'' }}" href="{{ route('pos.index') }}"><i class="bi bi-upc-scan"></i> PDV</a></li>
+        @endcan
+        @can('products.view')
         <li class="nav-item"><a class="nav-link {{ request()->is('products*')?'active':'' }}" href="{{ route('products.index') }}"><i class="bi bi-box-seam"></i> Produtos</a></li>
+        @endcan
+        @can('orders.view')
         <li class="nav-item"><a class="nav-link {{ request()->is('orders*')?'active':'' }}" href="{{ route('orders.index') }}"><i class="bi bi-receipt"></i> Pedidos</a></li>
-      @auth
-        @if(in_array(auth()->user()->role, ['admin','manager']))
+        @endcan
+        @can('categories.manage')
         <li class="nav-item"><a class="nav-link {{ request()->is('categories*')?'active':'' }}" href="{{ route('categories.index') }}"><i class="bi bi-tags"></i> Categorias</a></li>
-          @endif
-      @endauth
-        @auth
-    @if(in_array(auth()->user()->role, ['admin','manager']))
+        @endcan
+        @can('employees.manage')
         <li class="nav-item"><a class="nav-link {{ request()->is('employees*')?'active':'' }}" href="{{ route('employees.index') }}"><i class="bi bi-people"></i> Funcionários</a></li>
-          @endif
-    @endauth
-    @auth
-     @if(in_array(auth()->user()->role, ['admin','manager']))
+        @endcan
+        @can('reports.view')
         <li class="nav-item"><a class="nav-link {{ request()->is('reports*')?'active':'' }}" href="{{ route('reports.customers') }}">
           <i class="bi bi-graph-up"></i> Relatórios</a></li>
-        @endif
-      @endauth
+        @endcan
+        @hasanyrole('admin|gerente|vendedor')
         @php($cashOpen = \App\Models\CashRegister::where('status','open')->exists())
         <li class="nav-item">
           <a class="nav-link {{ request()->is('cash*')?'active':'' }}" href="{{ route('cash.index') }}">
@@ -50,6 +52,8 @@
             </span>
           </a>
         </li>
+        @endhasanyrole
+        @endhasanyrole
         <li class="nav-item"><a class="nav-link {{ request()->is('profile*') ? 'active' : '' }}" href="{{ route('profile.edit') }}"> <i class="bi bi-person"></i> Meu Perfil</a></li>
       </ul>
 

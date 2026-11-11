@@ -1,145 +1,148 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\{
-    ProductController, PosController, OrderController, CategoryController,
-    EmployeeController, ReportsController, CashRegisterController,
-    CustomerController, ReportController
-};
-use App\Http\Controllers\ServiceOrderController;
+use App\Http\Controllers\CashRegisterController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PosController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
-
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ReportsController;
+use App\Http\Controllers\ServiceOrderController;
+use Illuminate\Support\Facades\Route;
 
 // Auth (Breeze/Jetstream)
 require __DIR__.'/auth.php';
 Route::get('/dashboard', fn () => view('dashboard'))
-    ->middleware(['auth','verified'])
+    ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
 // Tudo abaixo exige login
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'role:admin|gerente|vendedor|estoque'])->group(function () {
 
-    // Home -> PDV
-    Route::get('/', fn () => redirect()->route('pos.index'))->name('home');
+    Route::get('/', fn () => redirect()->route(
+        request()->user()->can('pos.sell') ? 'pos.index' : 'products.index'
+    ))->name('home');
 
-    /* ===================== PDV (todos os logados) ===================== */
-    // --- Caixa: permitir seller, manager e admin ---
-    Route::middleware('role:seller,manager,admin')->group(function () {
-    Route::get('/cash',               [CashRegisterController::class,'index'])->name('cash.index');
-    Route::get('/cash/close-preview', [CashRegisterController::class,'closePreview'])->name('cash.close.preview');
-    Route::get('/cash/close-export',  [CashRegisterController::class,'exportCsv'])->name('cash.close.export');
-    Route::post('/cash/open',         [CashRegisterController::class,'open'])->name('cash.open');
-    Route::post('/cash/close',        [CashRegisterController::class,'close'])->name('cash.close');
-    Route::post('/cash/movement',     [CashRegisterController::class,'movement'])->name('cash.movement');
-    Route::get('/cash/close-print', [CashRegisterController::class,'closePrint'])->name('cash.close.print');
+    // Pendente: separar permissões de consultar, movimentar e fechar caixa.
+    Route::middleware('role:admin|gerente|vendedor')->group(function () {
+        Route::get('/cash', [CashRegisterController::class, 'index'])->name('cash.index');
+        Route::get('/cash/close-preview', [CashRegisterController::class, 'closePreview'])->name('cash.close.preview');
+        Route::get('/cash/close-export', [CashRegisterController::class, 'exportCsv'])->name('cash.close.export');
+        Route::post('/cash/open', [CashRegisterController::class, 'open'])->name('cash.open');
+        Route::post('/cash/close', [CashRegisterController::class, 'close'])->name('cash.close');
+        Route::post('/cash/movement', [CashRegisterController::class, 'movement'])->name('cash.movement');
+        Route::get('/cash/close-print', [CashRegisterController::class, 'closePrint'])->name('cash.close.print');
     });
-    Route::get('/pos', [PosController::class,'index'])->name('pos.index');
-    Route::get('/pos/find', [PosController::class,'find'])->name('pos.find');
-    Route::post('/pos/checkout', [PosController::class,'checkout'])->name('pos.checkout');
+    Route::get('/pos', [PosController::class, 'index'])->middleware(['can:pos.sell'])->name('pos.index');
+    Route::get('/pos/find', [PosController::class, 'find'])->middleware(['can:pos.sell'])->name('pos.find');
+    Route::post('/pos/checkout', [PosController::class, 'checkout'])->middleware(['can:pos.sell'])->name('pos.checkout');
 
     // Clientes rápidos para o PDV
-    Route::get('/customers/find',  [CustomerController::class,'find'])->name('customers.find');
-    Route::post('/customers/quick',[CustomerController::class,'quick'])->name('customers.quick');
+    Route::get('/customers/find', [CustomerController::class, 'find'])->middleware(['can:pos.sell'])->name('customers.find');
+    Route::post('/customers/quick', [CustomerController::class, 'quick'])->middleware(['can:pos.sell'])->name('customers.quick');
 
-    /* ====== Rotas de apoio ao PDV liberadas para qualquer logado ====== */
-    Route::get('/products-search', [ProductController::class,'search'])->name('products.search');
+    // Busca de produtos conforme a permissão de consulta.
+    Route::get('/products-search', [ProductController::class, 'search'])->middleware(['can:products.view'])->name('products.search');
 
-    /* ===================== Pedidos (todos os logados) ===================== */
-    Route::get('/orders',                         [OrderController::class,'index'])->name('orders.index');
-    Route::get('/orders/{order}',                 [OrderController::class,'show'])->name('orders.show');
-    Route::get('/orders/{order}/receipt',         [OrderController::class,'receipt'])->name('orders.receipt');
-    Route::get('/orders/{order}/receipt-simple',  [OrderController::class,'receiptSimple'])->name('orders.receipt.simple');
-    Route::post('/orders/{order}/finalize',       [OrderController::class,'finalize'])->name('orders.finalize');
-    Route::post('/orders/{order}/cancel',         [OrderController::class,'cancel'])->name('orders.cancel');
+    // Pedidos com permissões por operação.
+    Route::get('/orders', [OrderController::class, 'index'])->middleware(['can:orders.view'])->name('orders.index');
+    Route::get('/orders/{order}', [OrderController::class, 'show'])->middleware(['can:orders.view'])->name('orders.show');
+    Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt'])->middleware(['can:orders.view'])->name('orders.receipt');
+    Route::get('/orders/{order}/receipt-simple', [OrderController::class, 'receiptSimple'])->middleware(['can:orders.view'])->name('orders.receipt.simple');
+    Route::post('/orders/{order}/finalize', [OrderController::class, 'finalize'])->middleware(['can:orders.view', 'can:pos.sell'])->name('orders.finalize');
+    Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->middleware(['can:orders.cancel'])->name('orders.cancel');
 
-    /* ===================== Restrito a manager/admin ===================== */
-    Route::middleware('role:manager,admin')->group(function () {
+    // Catálogo, categorias e relatórios com permissões por operação.
 
-        // Produtos
-        Route::post('/products/labels-batch', [ProductController::class, 'labelsBatch'])
-            ->name('products.labels.batch');
+    // Produtos
+    Route::post('/products/labels-batch', [ProductController::class, 'labelsBatch'])
+        ->middleware(['can:products.update'])->name('products.labels.batch');
 
-        Route::get('/products/{product}/history', [ProductController::class, 'history'])
-            ->name('products.history');
+    Route::get('/products/{product}/history', [ProductController::class, 'history'])
+        ->middleware(['can:products.update'])->name('products.history');
 
-        Route::get('/products/import',  [ProductController::class,'importForm'])
-            ->name('products.import.form');
-        Route::post('/products/import', [ProductController::class,'import'])
-            ->name('products.import');
-        Route::get('/products/export.csv', [ProductController::class,'exportCsv'])
-            ->name('products.export.csv');
-        Route::get('/products/low-stock.csv', 
-                [ProductController::class, 'exportLowStockCsv']
-                 )->name('products.low.csv');
-                 Route::get('/products/template.csv', [ProductController::class, 'templateCsv'])
-            ->name('products.template.csv');
+    Route::get('/products/import', [ProductController::class, 'importForm'])
+        ->middleware(['can:products.create', 'can:products.update'])->name('products.import.form');
+    Route::post('/products/import', [ProductController::class, 'import'])
+        ->middleware(['can:products.create', 'can:products.update'])->name('products.import');
+    Route::get('/products/export.csv', [ProductController::class, 'exportCsv'])
+        ->middleware(['can:products.update'])->name('products.export.csv');
+    Route::get('/products/low-stock.csv',
+        [ProductController::class, 'exportLowStockCsv']
+    )->middleware(['can:products.update'])->name('products.low.csv');
+    Route::get('/products/template.csv', [ProductController::class, 'templateCsv'])
+        ->middleware(['can:products.create', 'can:products.update'])->name('products.template.csv');
 
+    Route::resource('products', ProductController::class)->only('index')->middleware('can:products.view');
+    Route::resource('products', ProductController::class)->only(['create', 'store'])->middleware('can:products.create');
+    Route::resource('products', ProductController::class)->only(['edit', 'update'])->middleware('can:products.update');
 
-        Route::resource('products', ProductController::class)->except(['show','destroy']);
+    Route::post('/products/{product}/toggle', [ProductController::class, 'toggle'])
+        ->middleware(['can:products.deactivate'])->name('products.toggle');
 
-        Route::post('/products/{product}/toggle', [ProductController::class,'toggle'])
-            ->name('products.toggle');
+    Route::get('/products/{product}/label', [ProductController::class, 'label'])
+        ->middleware(['can:products.update'])->name('products.label');
 
-        Route::get('/products/{product}/label', [ProductController::class,'label'])
-            ->name('products.label');
+    Route::post('/products/{product}/adjust', [ProductController::class, 'adjustStock'])
+        ->middleware(['can:stock.adjust'])->name('products.adjust');
 
-        Route::post('/products/{product}/adjust', [ProductController::class,'adjustStock'])
-            ->name('products.adjust');
+    // Categorias
+    Route::resource('categories', CategoryController::class)->except(['create', 'edit', 'show'])->middleware('can:categories.manage');
+    Route::post('/categories/{category}/toggle', [CategoryController::class, 'toggle'])
+        ->middleware(['can:categories.manage'])->name('categories.toggle');
 
-        // Categorias
-        Route::resource('categories', CategoryController::class)->except(['create','edit','show']);
-        Route::post('/categories/{category}/toggle', [CategoryController::class,'toggle'])
-            ->name('categories.toggle');
+    // Relatórios extras
+    Route::get('/reports/sales/summary', [ReportsController::class, 'salesSummary'])->middleware('can:reports.view')->name('reports.sales.summary');
+    Route::get('/reports/sales/summary.csv', [ReportsController::class, 'salesSummaryCsv'])->middleware('can:reports.view')->name('reports.sales.summary.csv');
 
-        // Relatórios extras
-        Route::get('/reports/sales/summary',      [ReportsController::class,'salesSummary'])->name('reports.sales.summary');
-        Route::get('/reports/sales/summary.csv',  [ReportsController::class,'salesSummaryCsv'])->name('reports.sales.summary.csv');
+    Route::get('/reports/sales/products', [ReportsController::class, 'salesByProduct'])->middleware('can:reports.view')->name('reports.sales.products');
+    Route::get('/reports/sales/products.csv', [ReportsController::class, 'salesByProductCsv'])->middleware('can:reports.view')->name('reports.sales.products.csv');
 
-        Route::get('/reports/sales/products',     [ReportsController::class,'salesByProduct'])->name('reports.sales.products');
-        Route::get('/reports/sales/products.csv', [ReportsController::class,'salesByProductCsv'])->name('reports.sales.products.csv');
+    Route::get('/reports/sales/categories', [ReportsController::class, 'salesByCategory'])->middleware('can:reports.view')->name('reports.sales.categories');
+    Route::get('/reports/sales/categories.csv', [ReportsController::class, 'salesByCategoryCsv'])->middleware('can:reports.view')->name('reports.sales.categories.csv');
 
-        Route::get('/reports/sales/categories',     [ReportsController::class,'salesByCategory'])->name('reports.sales.categories');
-        Route::get('/reports/sales/categories.csv', [ReportsController::class,'salesByCategoryCsv'])->name('reports.sales.categories.csv');
+    Route::get('/reports/stock/history', [ReportsController::class, 'stockHistory'])->middleware('can:reports.view')->name('reports.stock.history');
+    Route::get('/reports/stock/history.csv', [ReportsController::class, 'stockHistoryCsv'])->middleware('can:reports.view')->name('reports.stock.history.csv');
 
-        Route::get('/reports/stock/history',      [ReportsController::class,'stockHistory'])->name('reports.stock.history');
-        Route::get('/reports/stock/history.csv',  [ReportsController::class,'stockHistoryCsv'])->name('reports.stock.history.csv');
+    // Relatório de clientes
+    Route::get('/reports/customers', [ReportController::class, 'customers'])->middleware('can:reports.view')->name('reports.customers');
+    Route::get('/reports/customers.csv', [ReportController::class, 'customersCsv'])->middleware('can:reports.view')->name('reports.customers.csv');
 
-        // Relatório de clientes
-        Route::get('/reports/customers',     [ReportController::class,'customers'])->name('reports.customers');
-        Route::get('/reports/customers.csv', [ReportController::class,'customersCsv'])->name('reports.customers.csv');
+    // Pendente: revisar permissões de valores, cancelamento e finalização de OS.
+    Route::middleware(['auth', 'role:admin|gerente|vendedor'])->group(function () {
+        Route::get('/os', [ServiceOrderController::class, 'index'])->name('os.index');
+        Route::get('/os/create', [ServiceOrderController::class, 'create'])->name('os.create');
+        Route::post('/os', [ServiceOrderController::class, 'store'])->name('os.store');
+        Route::get('/os/{os}/edit', [ServiceOrderController::class, 'edit'])->name('os.edit');
+        Route::put('/os/{os}', [ServiceOrderController::class, 'update'])->name('os.update');
+
+        Route::post('/os/{os}/items', [ServiceOrderController::class, 'addItem'])->name('os.items.add');
+        Route::delete('/os/{os}/items/{item}', [ServiceOrderController::class, 'removeItem'])->name('os.items.remove');
+
+        Route::post('/os/{os}/to-pos', [ServiceOrderController::class, 'toPos'])->name('os.to.pos');
     });
-
-    Route::middleware(['auth','role:seller,manager,admin'])->group(function () {
-    Route::get('/os', [ServiceOrderController::class,'index'])->name('os.index');
-    Route::get('/os/create', [ServiceOrderController::class,'create'])->name('os.create');
-    Route::post('/os', [ServiceOrderController::class,'store'])->name('os.store');
-    Route::get('/os/{os}/edit', [ServiceOrderController::class,'edit'])->name('os.edit');
-    Route::put('/os/{os}', [ServiceOrderController::class,'update'])->name('os.update');
-
-    Route::post('/os/{os}/items', [ServiceOrderController::class,'addItem'])->name('os.items.add');
-    Route::delete('/os/{os}/items/{item}', [ServiceOrderController::class,'removeItem'])->name('os.items.remove');
-
-    Route::post('/os/{os}/to-pos', [ServiceOrderController::class,'toPos'])->name('os.to.pos');
-});
     /* ===================== Somente admin ===================== */
-    Route::middleware('role:admin')->group(function () {
+    Route::middleware('can:employees.manage')->group(function () {
         Route::resource('employees', EmployeeController::class)
             ->parameters(['employees' => 'employee'])
-            ->except(['create','edit','show']);
-    Route::patch('/employees/{user}/deactivate', [EmployeeController::class, 'deactivate'])
-    ->name('employees.deactivate');
+            ->except(['create', 'edit', 'show']);
+        Route::patch('/employees/{user}/deactivate', [EmployeeController::class, 'deactivate'])
+            ->name('employees.deactivate');
 
-    Route::patch('/employees/{user}/activate', [EmployeeController::class, 'activate'])
-    ->name('employees.activate');
+        Route::patch('/employees/{user}/activate', [EmployeeController::class, 'activate'])
+            ->name('employees.activate');
 
     });
 
-    Route::middleware('auth')->group(function () {
+});
+
+Route::middleware('auth')->group(function () {
     Route::get('/meu-perfil', [ProfileController::class, 'edit'])
         ->name('profile.edit');
 
     Route::put('/meu-perfil', [ProfileController::class, 'update'])
         ->name('profile.update');
-});
-
 });
