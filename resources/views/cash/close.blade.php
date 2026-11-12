@@ -39,21 +39,24 @@
           </tbody>
         </table>
       </div>
-      <form method="POST" action="{{ route('cash.close') }}" class="mt-2">@csrf
+      <form id="cashCloseForm" method="POST" action="{{ route('cash.close') }}" class="mt-2">@csrf
+        @include('cash._operation-fields', ['action' => 'close', 'register' => $reg, 'key' => $closingKey])
+        <label class="form-label" for="closeNotes">Observação do fechamento (opcional)</label>
+        <textarea id="closeNotes" name="close_notes" maxlength="2000" class="form-control mb-2" rows="2">{{ old('close_notes') }}</textarea>
         <button class="btn btn-danger"><i class="bi bi-check2-circle"></i> Fechar caixa</button>
         <a href="{{ route('cash.index') }}" class="btn btn-outline-secondary">Voltar</a>
       </form>
     </div>
   </div>
 </div>
-<form method="POST" action="{{ route('cash.close') }}" class="mt-2">@csrf
+<div class="mt-2">
   <a href="{{ route('cash.close.print') }}" target="_blank" class="btn btn-outline-secondary">
     <i class="bi bi-printer"></i> Imprimir fechamento
   </a>
   <a href="{{ route('cash.close.export') }}" class="btn btn-outline-secondary">
     <i class="bi bi-download"></i> Exportar CSV
   </a>
-  <button class="btn btn-danger"><i class="bi bi-check2-circle"></i> Fechar caixa</button>
+  <button type="submit" form="cashCloseForm" class="btn btn-danger"><i class="bi bi-check2-circle"></i> Fechar caixa</button>
   <a href="{{ route('cash.index') }}" class="btn btn-outline-secondary">Voltar</a>
-</form>
+</div>
 @endsection

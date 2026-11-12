@@ -13,14 +13,18 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CashRegisterController extends Controller
 {
     public function index(Request $request) {
-        $open = CashRegister::open()->latest('id')->first();
+        $openRegisters = CashRegister::open()->get();
+        $ambiguous = $openRegisters->count() > 1;
+        $open = $openRegisters->count() === 1 ? $openRegisters->first() : null;
         $history = CashRegister::latest('id')->limit(10)->get();
         $openingKey = $request->session()->get('cash.opening_key');
-        if (! $open && ! $openingKey) {
+        if (! $open && ! $ambiguous && ! $openingKey) {
             $openingKey = (string) Str::uuid();
             $request->session()->put('cash.opening_key', $openingKey);
         }
-        return view('cash.index', compact('open','history','openingKey'));
+        $closingKey = $open ? $this->operationKey($request, 'close', $open->id) : null;
+        $movementKey = $open ? $this->operationKey($request, 'movement', $open->id) : null;
+        return view('cash.index', compact('open', 'history', 'openingKey', 'ambiguous', 'openRegisters', 'closingKey', 'movementKey'));
     }
 
     public function open(Request $r, FinancialCoordinator $coordinator) {
@@ -34,49 +38,56 @@ class CashRegisterController extends Controller
         return redirect()->route('cash.index')->with('ok', $message);
     }
 
-    public function close(Request $r) {
-        $open = CashRegister::open()->latest('id')->firstOrFail();
-        $total = $open->movements()->sum(DB::raw("CASE WHEN type='IN' THEN amount ELSE -amount END"));
-        $closing = $open->opening_amount + $total;
-        $open->update([
-            'status'=>'closed',
-            'closing_amount'=>$closing,
-            'closed_at'=>now(),
-            'user_closed_id'=>optional($r->user())->id,
-            'close_note' => 'nullable|string|max:2000',
-        ]);
-
-         $reg = \App\Models\CashRegister::where('status','open')->latest('id')->firstOrFail();
-
-    // ... calcule totais/lançamentos/pedidos, etc ...
-    $reg->update([
-        'closed_at'  => now(),
-        'closed_by'  => $r->user()->id ?? null,
-        'close_note' => $data['close_note'] ?? null,
-        'status'     => 'closed',
-    ]);
-
-        return redirect()->route('cash.index')->with('ok','Caixa fechado.');
-    }
-
-    // lançamentos manuais (suprimento/sangria)
-    public function movement(Request $r) {
-        $data = $r->validate([
-            'type'=>['required','in:IN,OUT'],
-            'amount'=>['required','numeric','min:0.01'],
-            'reason'=>['nullable','string','max:120'],
-            'payment_method'=>['nullable','string','max:40'],
-        ]);
-        $open = CashRegister::open()->latest('id')->firstOrFail();
-        $data['cash_register_id'] = $open->id;
-        $data['user_id'] = optional($r->user())->id;
-        CashMovement::create($data);
-        return back()->with('ok','Lançamento registrado.');
-    }
-
-    public function closePreview()
+    public function close(Request $request, FinancialCoordinator $coordinator)
     {
-        return view('cash.close', $this->closingSummary());
+        $result = $coordinator->close($request->user(), $request->only(['idempotency_key', 'cash_register_id', 'close_notes']));
+        $this->forgetOperationKey($request, 'close', $result['cash_register_id']);
+        $message = $result['replayed']
+            ? 'Fechamento do caixa #'.$result['cash_register_id'].' já registrado.'
+            : 'Caixa #'.$result['cash_register_id'].' fechado.';
+
+        return redirect()->route('cash.index')->with('ok', $message);
+    }
+
+    public function movement(Request $request, FinancialCoordinator $coordinator)
+    {
+        $result = $coordinator->movement($request->user(), $request->only([
+            'idempotency_key', 'cash_register_id', 'type', 'amount', 'reason', 'payment_method',
+        ]));
+        $this->forgetOperationKey($request, 'movement', $result['cash_register_id']);
+        $message = $result['replayed']
+            ? 'Lançamento #'.$result['cash_movement_id'].' já registrado.'
+            : 'Lançamento #'.$result['cash_movement_id'].' registrado.';
+
+        return redirect()->route('cash.index')->with('ok', $message);
+    }
+
+    private function operationKey(Request $request, string $action, int $registerId): string
+    {
+        $path = "cash.$action.$registerId.key";
+        $key = $request->session()->get($path);
+        if (! $key) {
+            $key = (string) Str::uuid();
+            $request->session()->put($path, $key);
+        }
+
+        return $key;
+    }
+
+    private function forgetOperationKey(Request $request, string $action, int $registerId): void
+    {
+        $path = "cash.$action.$registerId.key";
+        if ($request->session()->get($path) === strtolower((string) $request->input('idempotency_key'))) {
+            $request->session()->forget($path);
+        }
+    }
+
+    public function closePreview(Request $request)
+    {
+        $summary = $this->closingSummary();
+        $closingKey = $this->operationKey($request, 'close', $summary['reg']->id);
+
+        return view('cash.close', $summary + compact('closingKey'));
     }
 
     public function closePrint()
@@ -86,7 +97,10 @@ class CashRegisterController extends Controller
 
     private function closingSummary(): array
     {
-        $reg = CashRegister::with(['openedBy', 'closedBy'])->open()->latest('id')->firstOrFail();
+        $registers = CashRegister::with(['openedBy', 'closedBy'])->open()->get();
+        abort_if($registers->count() > 1, 409, 'Existem múltiplos caixas abertos. A operação depende da reconciliação.');
+        $reg = $registers->first();
+        abort_unless($reg, 404);
 
         $byMethod = CashMovement::where('cash_register_id', $reg->id)
             ->select(
