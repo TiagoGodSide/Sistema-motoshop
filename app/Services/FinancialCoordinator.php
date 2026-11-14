@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Models\CashRegister;
 use App\Models\User;
 use Closure;
+use Carbon\CarbonImmutable;
+use DateTimeImmutable;
+use LogicException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -14,6 +17,39 @@ use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 
 class FinancialCoordinator
 {
+    private ?object $contextToken = null;
+
+    public function ownsContext(object $token): bool
+    {
+        return $this->contextToken === $token;
+    }
+
+    public function activeCash(FinancialContext $context, int $id): CashRegister
+    {
+        $context->assertActive();
+        return $this->requireActiveRegister($id);
+    }
+
+    public function context(?DateTimeImmutable $instant = null): FinancialContext
+    {
+        if ($this->contextToken === null || DB::connection()->transactionLevel() < 1) {
+            throw new LogicException('Contexto financeiro solicitado fora da coordenação.');
+        }
+        return new FinancialContext($this, $this->contextToken, DB::connection(), $instant ?? CarbonImmutable::now('UTC'));
+    }
+
+    /** New order contracts own the outer transaction; coordinate() keeps its existing contract. */
+    public function orderTransaction(Closure $operation): mixed
+    {
+        if (DB::connection()->transactionLevel() !== 0) {
+            throw new LogicException('O novo contrato exige uma transação externa própria.');
+        }
+        $instant = null;
+        return $this->coordinate(function () use ($operation, &$instant) {
+            $instant ??= CarbonImmutable::now('UTC');
+            return $operation($this->context($instant));
+        });
+    }
     /**
      * PDV e pedidos serão integrados na fase 4.3.
      * A linha permanente permite coordenar também quando nenhum caixa existe.
@@ -27,7 +63,13 @@ class FinancialCoordinator
                     throw new ServiceUnavailableHttpException(1, 'Coordenação financeira indisponível. Tente novamente com a mesma chave.');
                 }
 
-                return $operation();
+                $previousToken = $this->contextToken;
+                $this->contextToken ??= new \stdClass();
+                try {
+                    return $operation();
+                } finally {
+                    $this->contextToken = $previousToken;
+                }
             }, 3);
         } catch (PDOException $exception) {
             report($exception);
@@ -57,15 +99,10 @@ class FinancialCoordinator
         return $this->coordinate(function () use ($actor, $key, $amount, $notes, $hash) {
             // Recuperar primeiro permite repetir a operação mesmo após fechamento
             // ou alteração posterior do estado, sem consultar ou alterar esse estado.
-            $previous = DB::table('financial_operations')->where('idempotency_key', $key)->first();
+            $store = app(OperationReceiptStore::class);
+            $previous = $store->recover($this->context(), $actor, $key, 'cash.open', $hash);
             if ($previous !== null) {
-                if ($previous->operation !== 'cash.open'
-                    || (int) $previous->user_id !== (int) $actor->id
-                    || ! hash_equals($previous->request_hash, $hash)) {
-                    throw new ConflictHttpException('Chave de idempotência já utilizada com outra identidade ou conteúdo.');
-                }
-
-                return ['cash_register_id' => (int) $previous->cash_register_id, 'replayed' => true];
+                return $previous + ['replayed' => true];
             }
 
             $openIds = CashRegister::open()->lockForUpdate()->pluck('id');
@@ -90,7 +127,7 @@ class FinancialCoordinator
                 'updated_at' => $now,
             ]);
 
-            DB::table('financial_operations')->insert([
+            $financialId = DB::table('financial_operations')->insertGetId([
                 'idempotency_key' => $key,
                 'operation' => 'cash.open',
                 'user_id' => $actor->id,
@@ -99,7 +136,9 @@ class FinancialCoordinator
                 'created_at' => $now,
             ]);
 
-            return ['cash_register_id' => (int) $id, 'replayed' => false];
+            $result = ['cash_register_id' => (int) $id];
+            $store->append($this->context(), $actor, $key, 'cash.open', $hash, null, (int) $financialId, $result);
+            return $result + ['replayed' => false];
         });
     }
 
@@ -207,24 +246,13 @@ class FinancialCoordinator
 
     private function recover(User $actor, string $key, string $operation, array $payload): ?array
     {
-        $previous = DB::table('financial_operations')->where('idempotency_key', $key)->first();
-        if ($previous === null) {
-            return null;
-        }
-        if ($previous->operation !== $operation || (int) $previous->user_id !== (int) $actor->id
-            || ! hash_equals($previous->request_hash, $this->requestHash($payload))) {
-            throw new ConflictHttpException('Chave de idempotência já utilizada com outra identidade ou conteúdo.');
-        }
-        if ($previous->result === null) {
-            throw new ServiceUnavailableHttpException(1, 'Resultado financeiro indisponível. Preserve a chave da operação.');
-        }
-
-        return json_decode($previous->result, true, 512, JSON_THROW_ON_ERROR) + ['replayed' => true];
+        $result = app(OperationReceiptStore::class)->recover($this->context(), $actor, $key, $operation, $this->requestHash($payload));
+        return $result === null ? null : $result + ['replayed' => true];
     }
 
     private function record(User $actor, string $key, string $operation, array $payload, array $result): void
     {
-        DB::table('financial_operations')->insert([
+        $id = DB::table('financial_operations')->insertGetId([
             'idempotency_key' => $key,
             'operation' => $operation,
             'user_id' => $actor->id,
@@ -234,6 +262,8 @@ class FinancialCoordinator
             'result' => json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
             'created_at' => DB::raw('CURRENT_TIMESTAMP'),
         ]);
+        app(OperationReceiptStore::class)->append($this->context(), $actor, $key, $operation,
+            $this->requestHash($payload), null, (int) $id, $result);
     }
 
     private function requestHash(array $payload): string

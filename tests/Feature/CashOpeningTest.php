@@ -163,9 +163,13 @@ class CashOpeningTest extends TestCase
         $this->assertSame($before, $this->financialState());
 
         $this->actingAs(User::findOrFail(DB::table('financial_operations')->value('user_id')));
-        DB::table('financial_operations')->update(['operation' => 'cash.close']);
         $before = $this->financialState();
-        $this->post(route('cash.open'), $payload)->assertConflict();
+        // Exercise cross-operation reuse through HTTP. The new composite FK also
+        // rejects direct mutation of a linked receipt (covered by structure tests).
+        $this->post(route('cash.close'), [
+            'idempotency_key' => $payload['idempotency_key'],
+            'cash_register_id' => DB::table('financial_operations')->value('cash_register_id'),
+        ])->assertConflict();
         $this->assertSame($before, $this->financialState());
     }
 

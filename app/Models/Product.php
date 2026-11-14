@@ -7,6 +7,16 @@ use Illuminate\Support\Str; // <— importa o Str
 
 class Product extends Model
 {
+    /** Server-side policy for future order contracts; existing controllers are unchanged. */
+    public function effectiveStockPolicy(): string
+    {
+        $policy = $this->getRawOriginal('stock_policy') ?? 'tracked';
+        if (! in_array($policy, ['tracked', 'untracked'], true)) {
+            throw new \InvalidArgumentException('Política de estoque persistida inválida.');
+        }
+        return $policy;
+    }
+
     protected $fillable = [
         'name','sku','ean','internal_barcode','price','cost_price',
         'stock','min_stock','is_active','category_id','unit',
